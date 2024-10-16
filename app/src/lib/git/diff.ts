@@ -8,6 +8,7 @@ import {
   FileChange,
   AppFileStatusKind,
   SubmoduleStatus,
+  CommittedFileChange,
 } from '../../models/status'
 import {
   DiffType,
@@ -24,7 +25,6 @@ import { spawnAndComplete } from './spawn'
 
 import { DiffParser } from '../diff-parser'
 import { getOldPathOrDefault } from '../get-old-path'
-import { getCaptures } from '../helpers/regex'
 import { readFile } from 'fs/promises'
 import { forceUnwrap } from '../fatal-error'
 import { git } from './core'
@@ -33,6 +33,8 @@ import { GitError } from 'dugite'
 import { IChangesetData, parseRawLogWithNumstat } from './log'
 import { getConfigValue } from './config'
 import { getMergeBase } from './merge'
+import { IStatusEntry } from '../status-parser'
+import { createLogParser } from './git-delimiter-parser'
 
 /**
  * V8 has a limit on the size of string it can create (~256MB), and unless we want to
@@ -175,12 +177,7 @@ export async function getBranchMergeBaseDiff(
     maxBuffer: Infinity,
   })
 
-  return buildDiff(
-    Buffer.from(result.combinedOutput),
-    repository,
-    file,
-    latestCommit
-  )
+  return buildDiff(Buffer.from(result.stdout), repository, file, latestCommit)
 }
 
 /**
@@ -237,12 +234,7 @@ export async function getCommitRangeDiff(
     )
   }
 
-  return buildDiff(
-    Buffer.from(result.combinedOutput),
-    repository,
-    file,
-    latestCommit
-  )
+  return buildDiff(Buffer.from(result.stdout), repository, file, latestCommit)
 }
 
 /**
@@ -285,7 +277,7 @@ export async function getBranchMergeBaseChangedFiles(
   )
 
   return parseRawLogWithNumstat(
-    result.combinedOutput,
+    result.stdout,
     `${latestComparisonBranchCommitRef}`,
     mergeBaseCommit
   )
@@ -443,7 +435,8 @@ async function getImageDiff(
     // File status can't be conflicted for a file in a commit
     if (
       file.status.kind !== AppFileStatusKind.New &&
-      file.status.kind !== AppFileStatusKind.Untracked
+      file.status.kind !== AppFileStatusKind.Untracked &&
+      file.status.kind !== AppFileStatusKind.Deleted
     ) {
       // TODO: commitish^ won't work for the first commit
       //
@@ -453,6 +446,17 @@ async function getImageDiff(
         repository,
         getOldPathOrDefault(file),
         `${oldestCommitish}^`
+      )
+    }
+
+    if (
+      file instanceof CommittedFileChange &&
+      file.status.kind === AppFileStatusKind.Deleted
+    ) {
+      previous = await getBlobImage(
+        repository,
+        getOldPathOrDefault(file),
+        file.parentCommitish
       )
     }
   }
@@ -713,20 +717,51 @@ export async function getWorkingDirectoryImage(
  */
 export async function getBinaryPaths(
   repository: Repository,
-  ref: string
+  ref: string,
+  conflictedFilesInIndex: ReadonlyArray<IStatusEntry>
 ): Promise<ReadonlyArray<string>> {
+  const [detectedBinaryFiles, conflictedFilesUsingBinaryMergeDriver] =
+    await Promise.all([
+      getDetectedBinaryFiles(repository, ref),
+      getFilesUsingBinaryMergeDriver(repository, conflictedFilesInIndex),
+    ])
+
+  return Array.from(
+    new Set([...detectedBinaryFiles, ...conflictedFilesUsingBinaryMergeDriver])
+  )
+}
+
+/**
+ * Runs diff --numstat to get the list of files that have changed and which
+ * Git have detected as binary files
+ */
+async function getDetectedBinaryFiles(repository: Repository, ref: string) {
   const { output } = await spawnAndComplete(
     ['diff', '--numstat', '-z', ref],
     repository.path,
     'getBinaryPaths'
   )
-  const captures = getCaptures(output.toString('utf8'), binaryListRegex)
-  if (captures.length === 0) {
-    return []
-  }
-  // flatten the list (only does one level deep)
-  const flatCaptures = captures.reduce((acc, val) => acc.concat(val))
-  return flatCaptures
+
+  return Array.from(output.toString().matchAll(binaryListRegex), m => m[1])
 }
 
 const binaryListRegex = /-\t-\t(?:\0.+\0)?([^\0]*)/gi
+
+async function getFilesUsingBinaryMergeDriver(
+  repository: Repository,
+  files: ReadonlyArray<IStatusEntry>
+) {
+  const { stdout } = await git(
+    ['check-attr', '--stdin', '-z', 'merge'],
+    repository.path,
+    'getConflictedFilesUsingBinaryMergeDriver',
+    {
+      stdin: files.map(f => f.path).join('\0'),
+    }
+  )
+
+  return createLogParser({ path: '', attr: '', value: '' })
+    .parse(stdout)
+    .filter(x => x.attr === 'merge' && x.value === 'binary')
+    .map(x => x.path)
+}

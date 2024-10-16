@@ -1,9 +1,13 @@
 import * as React from 'react'
 import { Dispatcher } from '../dispatcher/index'
 import { LinkButton } from '../lib/link-button'
-import { lastShowCaseVersionSeen, updateStore } from '../lib/update-store'
+import {
+  UpdateStatus,
+  lastShowCaseVersionSeen,
+  updateStore,
+} from '../lib/update-store'
 import { Octicon } from '../octicons'
-import * as OcticonSymbol from '../octicons/octicons.generated'
+import * as octicons from '../octicons/octicons.generated'
 import { PopupType } from '../../models/popup'
 import { shell } from '../../lib/app-shell'
 
@@ -11,13 +15,14 @@ import { ReleaseSummary } from '../../models/release-notes'
 import { Banner } from './banner'
 import { ReleaseNotesUri } from '../lib/releases'
 import { RichText } from '../lib/rich-text'
+import { Emoji } from '../../lib/emoji'
 
 interface IUpdateAvailableProps {
   readonly dispatcher: Dispatcher
   readonly newReleases: ReadonlyArray<ReleaseSummary> | null
   readonly isX64ToARM64ImmediateAutoUpdate: boolean
   readonly isUpdateShowcaseVisible: boolean
-  readonly emoji: Map<string, string>
+  readonly emoji: Map<string, Emoji>
   readonly onDismissed: () => void
 }
 
@@ -35,7 +40,7 @@ export class UpdateAvailable extends React.Component<
         {!this.props.isUpdateShowcaseVisible && (
           <Octicon
             className="download-icon"
-            symbol={OcticonSymbol.desktopDownload}
+            symbol={octicons.desktopDownload}
           />
         )}
 
@@ -124,6 +129,15 @@ export class UpdateAvailable extends React.Component<
   }
 
   private updateNow = () => {
+    if (
+      (__RELEASE_CHANNEL__ === 'development' ||
+        __RELEASE_CHANNEL__ === 'test') &&
+      updateStore.state.status !== UpdateStatus.UpdateReady
+    ) {
+      this.props.onDismissed()
+      return // causes a crash.. if no update is available
+    }
+
     updateStore.quitAndInstallUpdate()
   }
 }

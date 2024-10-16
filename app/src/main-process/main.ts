@@ -16,7 +16,11 @@ import { AppWindow } from './app-window'
 import { buildDefaultMenu, getAllMenuItems } from './menu'
 import { shellNeedsPatching, updateEnvironmentForProcess } from '../lib/shell'
 import { parseAppURL } from '../lib/parse-app-url'
-import { handleSquirrelEvent } from './squirrel-updater'
+import {
+  handleSquirrelEvent,
+  installWindowsCLI,
+  uninstallWindowsCLI,
+} from './squirrel-updater'
 import { fatalError } from '../lib/fatal-error'
 
 import { log as writeLog } from './log'
@@ -30,7 +34,7 @@ import { now } from './now'
 import { showUncaughtException } from './show-uncaught-exception'
 import { buildContextMenu } from './menu/build-context-menu'
 import { OrderedWebRequest } from './ordered-webrequest'
-import { installAuthenticatedAvatarFilter } from './authenticated-avatar-filter'
+import { installAuthenticatedImageFilter } from './authenticated-image-filter'
 import { installAliveOriginFilter } from './alive-origin-filter'
 import { installSameOriginFilter } from './same-origin-filter'
 import * as ipcMain from './ipc-main'
@@ -317,8 +321,9 @@ app.on('ready', () => {
   // Ensures Alive websocket sessions are initiated with an acceptable Origin
   installAliveOriginFilter(orderedWebRequest)
 
-  // Adds an authorization header for requests of avatars on GHES
-  const updateAccounts = installAuthenticatedAvatarFilter(orderedWebRequest)
+  // Adds an authorization header for requests of avatars on GHES and private
+  // repo assets
+  const updateAccounts = installAuthenticatedImageFilter(orderedWebRequest)
 
   Menu.setApplicationMenu(
     buildDefaultMenu({
@@ -521,6 +526,11 @@ app.on('ready', () => {
     mainWindow?.setWindowZoomFactor(zoomFactor)
   )
 
+  if (__WIN32__) {
+    ipcMain.on('install-windows-cli', installWindowsCLI)
+    ipcMain.on('uninstall-windows-cli', uninstallWindowsCLI)
+  }
+
   /**
    * An event sent by the renderer asking for a copy of the current
    * application menu.
@@ -606,6 +616,9 @@ app.on('ready', () => {
   ipcMain.on('select-all-window-contents', () =>
     mainWindow?.selectAllWindowContents()
   )
+
+  /** An event sent by the renderer indicating a modal dialog is opened */
+  ipcMain.on('dialog-did-open', () => mainWindow?.dialogDidOpen())
 
   /**
    * An event sent by the renderer asking whether the Desktop is in the
@@ -721,8 +734,6 @@ function createWindow() {
       default: installExtension,
       REACT_DEVELOPER_TOOLS,
     } = require('electron-devtools-installer')
-
-    require('electron-debug')({ showDevTools: true })
 
     const ChromeLens = {
       id: 'idikgljglpfilbhaboonnpnnincjhjkd',

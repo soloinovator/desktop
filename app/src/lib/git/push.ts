@@ -1,18 +1,13 @@
 import { GitError as DugiteError } from 'dugite'
 
-import {
-  git,
-  IGitExecutionOptions,
-  gitNetworkArguments,
-  GitError,
-} from './core'
+import { git, IGitExecutionOptions, GitError } from './core'
 import { Repository } from '../../models/repository'
 import { IPushProgress } from '../../models/progress'
-import { IGitAccount } from '../../models/git-account'
 import { PushProgressParser, executionOptionsWithProgress } from '../progress'
 import { AuthenticationErrors } from './authentication'
 import { IRemote } from '../../models/remote'
 import { envForRemoteOperation } from './environment'
+import { Branch } from '../../models/branch'
 
 export type PushOptions = {
   /**
@@ -22,6 +17,9 @@ export type PushOptions = {
    * See https://git-scm.com/docs/git-push#Documentation/git-push.txt---no-force-with-lease
    */
   readonly forceWithLease: boolean
+
+  /** A branch to push instead of the current branch */
+  readonly branch?: Branch
 }
 
 /**
@@ -50,7 +48,6 @@ export type PushOptions = {
  */
 export async function push(
   repository: Repository,
-  account: IGitAccount | null,
   remote: IRemote,
   localBranch: string,
   remoteBranch: string | null,
@@ -61,7 +58,6 @@ export async function push(
   progressCallback?: (progress: IPushProgress) => void
 ): Promise<void> {
   const args = [
-    ...gitNetworkArguments(),
     'push',
     remote.name,
     remoteBranch ? `${localBranch}:${remoteBranch}` : localBranch,
@@ -80,7 +76,7 @@ export async function push(
   expectedErrors.add(DugiteError.ProtectedBranchForcePush)
 
   let opts: IGitExecutionOptions = {
-    env: await envForRemoteOperation(account, remote.url),
+    env: await envForRemoteOperation(remote.url),
     expectedErrors,
   }
 

@@ -1,14 +1,10 @@
 import * as React from 'react'
 
-import { Branch } from '../../models/branch'
+import { Branch, BranchType } from '../../models/branch'
 
 import { assertNever } from '../../lib/fatal-error'
 
-import {
-  FilterList,
-  IFilterListGroup,
-  SelectionSource,
-} from '../lib/filter-list'
+import { IFilterListGroup, SelectionSource } from '../lib/filter-list'
 import { IMatches } from '../../lib/fuzzy-find'
 import { Button } from '../lib/button'
 import { TextBox } from '../lib/text-box'
@@ -20,6 +16,9 @@ import {
 } from './group-branches'
 import { NoBranches } from './no-branches'
 import { SelectionDirection, ClickSource } from '../lib/list'
+import { generateBranchContextMenuItems } from './branch-list-item-context-menu'
+import { showContextualMenu } from '../../lib/menu-item'
+import { SectionFilterList } from '../lib/section-filter-list'
 
 const RowHeight = 30
 
@@ -92,6 +91,9 @@ interface IBranchListProps {
 
   readonly textbox?: TextBox
 
+  /** Aria label for a specific row */
+  readonly getBranchAriaLabel: (item: IBranchListItem) => string | undefined
+
   /**
    * Render function to apply to each branch in the list
    */
@@ -113,6 +115,12 @@ interface IBranchListProps {
 
   /** Optional: No branches message */
   readonly noBranchesMessage?: string | JSX.Element
+
+  /** Optional: Callback for if rename context menu should exist */
+  readonly onRenameBranch?: (branchName: string) => void
+
+  /** Optional: Callback for if delete context menu should exist */
+  readonly onDeleteBranch?: (branchName: string) => void
 }
 
 interface IBranchListState {
@@ -128,16 +136,21 @@ interface IBranchListState {
   readonly selectedItem: IBranchListItem | null
 }
 
-function createState(props: IBranchListProps): IBranchListState {
+function createState(
+  defaultBranch: Branch | null,
+  currentBranch: Branch | null,
+  allBranches: ReadonlyArray<Branch>,
+  recentBranches: ReadonlyArray<Branch>,
+  selectedBranch: Branch | null
+): IBranchListState {
   const groups = groupBranches(
-    props.defaultBranch,
-    props.currentBranch,
-    props.allBranches,
-    props.recentBranches
+    defaultBranch,
+    currentBranch,
+    allBranches,
+    recentBranches
   )
 
   let selectedItem: IBranchListItem | null = null
-  const selectedBranch = props.selectedBranch
   if (selectedBranch) {
     for (const group of groups) {
       selectedItem =
@@ -160,15 +173,29 @@ export class BranchList extends React.Component<
   IBranchListProps,
   IBranchListState
 > {
-  private branchFilterList: FilterList<IBranchListItem> | null = null
+  private branchFilterList: SectionFilterList<IBranchListItem> | null = null
 
   public constructor(props: IBranchListProps) {
     super(props)
-    this.state = createState(props)
+    this.state = createState(
+      props.defaultBranch,
+      props.currentBranch,
+      props.allBranches,
+      props.recentBranches,
+      props.selectedBranch
+    )
   }
 
   public componentWillReceiveProps(nextProps: IBranchListProps) {
-    this.setState(createState(nextProps))
+    this.setState(
+      createState(
+        nextProps.defaultBranch,
+        nextProps.currentBranch,
+        nextProps.allBranches,
+        nextProps.recentBranches,
+        nextProps.selectedBranch
+      )
+    )
   }
 
   public selectNextItem(focus: boolean = false, direction: SelectionDirection) {
@@ -179,7 +206,7 @@ export class BranchList extends React.Component<
 
   public render() {
     return (
-      <FilterList<IBranchListItem>
+      <SectionFilterList<IBranchListItem>
         ref={this.onBranchesFilterListRef}
         className="branches-list"
         rowHeight={RowHeight}
@@ -200,12 +227,38 @@ export class BranchList extends React.Component<
         hideFilterRow={this.props.hideFilterRow}
         onFilterListResultsChanged={this.props.onFilterListResultsChanged}
         renderPreList={this.props.renderPreList}
+        onItemContextMenu={this.onBranchContextMenu}
+        getItemAriaLabel={this.getItemAriaLabel}
+        getGroupAriaLabel={this.getGroupAriaLabel}
       />
     )
   }
 
+  private onBranchContextMenu = (
+    item: IBranchListItem,
+    event: React.MouseEvent<HTMLDivElement>
+  ) => {
+    event.preventDefault()
+
+    const { onRenameBranch, onDeleteBranch } = this.props
+    if (onRenameBranch === undefined && onDeleteBranch === undefined) {
+      return
+    }
+
+    const { type, name } = item.branch
+    const isLocal = type === BranchType.Local
+    const items = generateBranchContextMenuItems({
+      name,
+      isLocal,
+      onRenameBranch,
+      onDeleteBranch,
+    })
+
+    showContextualMenu(items)
+  }
+
   private onBranchesFilterListRef = (
-    filterList: FilterList<IBranchListItem> | null
+    filterList: SectionFilterList<IBranchListItem> | null
   ) => {
     this.branchFilterList = filterList
   }
@@ -223,6 +276,16 @@ export class BranchList extends React.Component<
       default:
         return null
     }
+  }
+
+  private getItemAriaLabel = (item: IBranchListItem) => {
+    return this.props.getBranchAriaLabel?.(item)
+  }
+
+  private getGroupAriaLabel = (group: number) => {
+    const identifier = this.state.groups[group]
+      .identifier as BranchGroupIdentifier
+    return this.getGroupLabel(identifier)
   }
 
   private renderGroupHeader = (label: string) => {

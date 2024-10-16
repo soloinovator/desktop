@@ -13,6 +13,7 @@ import {
   renderDefaultBranch,
 } from '../../branches'
 import { ClickSource } from '../../lib/list'
+import { getDefaultAriaLabelForBranch } from '../../branches/branch-renderer'
 
 interface IChooseTargetBranchDialogProps {
   /**
@@ -96,6 +97,10 @@ export class ChooseTargetBranchDialog extends React.Component<
     return renderDefaultBranch(item, matches, this.props.currentBranch)
   }
 
+  private getBranchAriaLabel = (item: IBranchListItem): string => {
+    return getDefaultAriaLabelForBranch(item)
+  }
+
   private onEnterPressed = (branch: Branch, source: ClickSource) => {
     if (source.kind !== 'keyboard' || source.event.key !== 'Enter') {
       return
@@ -170,7 +175,6 @@ export class ChooseTargetBranchDialog extends React.Component<
         id="cherry-pick"
         onDismissed={this.props.onDismissed}
         onSubmit={this.onSubmit}
-        dismissable={true}
         title={
           <strong>
             Cherry-pick {this.props.commitCount} {pluralize} to a branch
@@ -191,6 +195,7 @@ export class ChooseTargetBranchDialog extends React.Component<
             canCreateNewBranch={true}
             onCreateNewBranch={this.props.onCreateNewBranch}
             renderBranch={this.renderBranch}
+            getBranchAriaLabel={this.getBranchAriaLabel}
             onItemClick={this.onEnterPressed}
           />
         </DialogContent>

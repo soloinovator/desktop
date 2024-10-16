@@ -22,7 +22,6 @@ import { setNumber, getNumber } from '../../lib/local-storage'
 import { enableUpdateFromEmulatedX64ToARM64 } from '../../lib/feature-flag'
 import { offsetFromNow } from '../../lib/offset-from'
 import { gte, SemVer } from 'semver'
-import { getRendererGUID } from '../../lib/get-renderer-guid'
 import { getVersion } from './app-proxy'
 
 /** The last version a showcase was seen. */
@@ -216,9 +215,6 @@ class UpdateStore {
       return __UPDATES_URL__
     }
 
-    // Send the GUID to the update server for staggered release support
-    url.searchParams.set('guid', await getRendererGUID())
-
     if (skipGuidCheck) {
       // This will effectively disable the staggered releases system and attempt
       // to retrieve the latest available deployment.
@@ -292,6 +288,19 @@ class UpdateStore {
         r => new Date(r.datePublished).getTime() > offsetFromNow(-15, 'days')
       )
       .some(r => r.pretext.length > 0)
+  }
+
+  /** This method has only been added for ease of testing the update banner in
+   * this state and as such is limite to dev and test environments */
+  public setIsx64ToARM64ImmediateAutoUpdate(value: boolean) {
+    if (
+      __RELEASE_CHANNEL__ !== 'development' &&
+      __RELEASE_CHANNEL__ !== 'test'
+    ) {
+      return
+    }
+
+    this.isX64ToARM64ImmediateAutoUpdate = value
   }
 }
 

@@ -155,7 +155,7 @@ body > .tooltip,
     flex-direction: row;
     padding: var(--spacing-half) 0;
 
-    img {
+    .avatar {
       width: 32px;
       height: 32px;
       margin-right: var(--spacing);
@@ -203,10 +203,32 @@ body > .tooltip,
       }
     }
   }
+
+  &.window-controls-tooltip {
+    background-color: var(--toolbar-tooltip-background-color);
+    box-shadow: 0 8px 24px var(--toolbar-tooltip-shadow-color);
+
+    &::before {
+      border-bottom-color: var(--toolbar-tooltip-background-color);
+    }
+  }
 }
 
 .tooltip-host {
   // Tooltips are positioned absolutely relative to their hosts so the hosts
   // need to be position: relative or position: absolute.
   position: relative;
+}
+
+button.toggletip {
+  // override default button styles
+  overflow: inherit;
+  text-overflow: inherit;
+  white-space: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  padding: inherit;
+  border: none;
+  color: inherit;
+  background-color: inherit;
 }

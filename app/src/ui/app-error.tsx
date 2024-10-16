@@ -220,17 +220,21 @@ export class AppError extends React.Component<IAppErrorProps, IAppErrorState> {
         type="error"
         key="error"
         title={this.getTitle(error)}
-        dismissable={false}
+        backdropDismissable={false}
         onSubmit={this.props.onDismissed}
         onDismissed={this.props.onDismissed}
         disabled={this.state.disabled}
         className={
           isRawGitError(this.state.error) ? 'raw-git-error' : undefined
         }
+        role="alertdialog"
+        ariaDescribedBy="app-error-description"
       >
         <DialogContent onRef={this.onDialogContentRef}>
-          {this.renderErrorMessage(error)}
-          {this.renderContentAfterErrorMessage(error)}
+          <div id="app-error-description">
+            {this.renderErrorMessage(error)}
+            {this.renderContentAfterErrorMessage(error)}
+          </div>
         </DialogContent>
         {this.renderFooter(error)}
       </Dialog>

@@ -7,6 +7,7 @@ import { mapStatus } from '../../lib/status'
 import { WorkingDirectoryFileChange } from '../../models/status'
 import { TooltipDirection } from '../lib/tooltip'
 import { TooltippedContent } from '../lib/tooltipped-content'
+import { AriaLiveContainer } from '../accessibility/aria-live-container'
 
 interface IChangedFileProps {
   readonly file: WorkingDirectoryFileChange
@@ -14,6 +15,7 @@ interface IChangedFileProps {
   readonly availableWidth: number
   readonly disableSelection: boolean
   readonly checkboxTooltip?: string
+  readonly focused: boolean
   readonly onIncludeChanged: (path: string, include: boolean) => void
 }
 
@@ -35,7 +37,7 @@ export class ChangedFile extends React.Component<IChangedFileProps, {}> {
   }
 
   public render() {
-    const { file, availableWidth, disableSelection, checkboxTooltip } =
+    const { file, availableWidth, disableSelection, checkboxTooltip, focused } =
       this.props
     const { status, path } = file
     const fileStatus = mapStatus(status)
@@ -51,6 +53,17 @@ export class ChangedFile extends React.Component<IChangedFileProps, {}> {
       checkboxWidth -
       filePadding -
       statusWidth
+
+    const includedText =
+      this.props.include === true
+        ? 'included'
+        : this.props.include === undefined
+        ? 'partially included'
+        : 'not included'
+
+    const pathScreenReaderMessage = `${path} ${mapStatus(
+      status
+    )} ${includedText}`
 
     return (
       <div className="file">
@@ -77,12 +90,18 @@ export class ChangedFile extends React.Component<IChangedFileProps, {}> {
           ariaHidden={true}
         />
 
-        <Octicon
-          symbol={iconForStatus(status)}
-          className={'status status-' + fileStatus.toLowerCase()}
-          title={fileStatus}
-          tooltipDirection={TooltipDirection.EAST}
-        />
+        <AriaLiveContainer message={pathScreenReaderMessage} />
+        <TooltippedContent
+          ancestorFocused={focused}
+          openOnFocus={true}
+          tooltip={fileStatus}
+          direction={TooltipDirection.EAST}
+        >
+          <Octicon
+            symbol={iconForStatus(status)}
+            className={'status status-' + fileStatus.toLowerCase()}
+          />
+        </TooltippedContent>
       </div>
     )
   }
